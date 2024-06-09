@@ -113,10 +113,15 @@ contract EnglishAuction {
 
     //stores bids
     mapping(address => Bid) public bids;
+    //stores whether the address has withdrawn an unsuccessful bid
+    mapping(address => bool) public withdrawn;
     //stores the EVM address of the highest bidder
     address public highestBidder;
     //whitelist address
     IWhiteList public whitelist;
+
+    uint public numBids; // count the number of bids
+    Bid[] public bidHistory; //stores historical bids for UI convenience
 
     //represends the current state of the auction
     enum AuctionState{ 
@@ -180,11 +185,12 @@ contract EnglishAuction {
     }
 
     /** 
-        @notice called by a bidder to place a bid while the auction is running. Transfers tokens.
+        @notice called by a bidder to place a bid while the auction is running. Transfers tokens. 
+        @notice ASSUMES TOKEN REVERTS ON FAILURE
         @param _address is their bitcoin address that will recieve the ordinal if they are the winning bid, and settle in time
         @param _amount is the bid amount in the smallest unit of the bidding token 
         @dev assumes the bidding token reverts on failed transfer
-        @dev if the bidder has an existing bid, the difference between the new bid and the old bid is sent to this contract
+        @dev if the bidder has an existing bid, the difference in tokens between the new bid and the old bid are sent to this contract
     */
     function bid(string memory _address, uint _amount) public ifAllowed{
         require(getState() == AuctionState.RUNNING, "auction is not running");
@@ -196,6 +202,9 @@ contract EnglishAuction {
         bids[msg.sender].amount = _amount;
         bids[msg.sender].btcAddress = _address;
         highestBidder = msg.sender;
+        //maintain hstory
+        bidHistory.push(Bid(_amount, _address));
+        numBids++;
         emit NewBid(msg.sender, _address, _amount, block.timestamp);
     }
 
@@ -223,17 +232,39 @@ contract EnglishAuction {
         require(msg.sender == seller, "not authorized");
         require(getState() == AuctionState.COMPLETE, "not permitted");
         require(sellerHasWithdrawn == false, "already witdhdrawn");
-        biddingToken.transfer(msg.sender, bids[highestBidder].amount);
         sellerHasWithdrawn = true;
+        biddingToken.transfer(msg.sender, bids[highestBidder].amount);
     }
+
+    /**
+        @notice call to determine whether an address can withdraw an unsuccessful bid
+        @param who is the address being queried
+        @return a boolean indicating whether this address can withdraw their bid
+    */
+    function canWithdraw(address who) public view returns (bool){
+        return getState() == AuctionState.COMPLETE && bids[who].amount > 0 && withdrawn[who] == false;
+    }
+
     /**
         @notice unsuccessful bidders can withdraw their bid after the auction is complete
     */
     function unsuccessfulBidWithdraw() public{
         require(msg.sender != highestBidder, "not authorized");
         require(getState() == AuctionState.COMPLETE, "not permitted");
+        require(withdrawn[msg.sender] == false, "already withdrawn");
+        
+        withdrawn[msg.sender] = true;
         biddingToken.transfer(msg.sender, bids[msg.sender].amount);
-        bids[msg.sender].amount = 0;
+        //bids[msg.sender].amount = 0;
+    }
+
+    /**
+        @notice convenience function to access historical bid *amount* for the UI
+        @param index - ordered bids starting at 0 and ending at numBids-1
+        @return the amount bid by the indexed bid
+    */
+    function getBidAmountByIndex(uint index) public view returns (uint){
+        return bidHistory[index].amount;
     }
 }
 
