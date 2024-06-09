@@ -121,7 +121,8 @@ contract EnglishAuction {
     IWhiteList public whitelist;
 
     uint public numBids; // count the number of bids
-    Bid[] public bidHistory; //stores historical bids for UI convenience
+    uint[] public bidAmountHistory; //stores historical bid amounts for UI convenience
+    address[] public bidAddressHistory; //stores historical bidding addresses for UI convenience
 
     //represends the current state of the auction
     enum AuctionState{ 
@@ -203,7 +204,8 @@ contract EnglishAuction {
         bids[msg.sender].btcAddress = _address;
         highestBidder = msg.sender;
         //maintain hstory
-        bidHistory.push(Bid(_amount, _address));
+        bidAmountHistory.push(_amount);
+        bidAddressHistory.push(msg.sender);
         numBids++;
         emit NewBid(msg.sender, _address, _amount, block.timestamp);
     }
@@ -264,7 +266,16 @@ contract EnglishAuction {
         @return the amount bid by the indexed bid
     */
     function getBidAmountByIndex(uint index) public view returns (uint){
-        return bidHistory[index].amount;
+        return bidAmountHistory[index];
+    }
+
+    /**
+        @notice convenience function to access historical bidding *Ethereum address* for the UI
+        @param index - ordered bids starting at 0 and ending at numBids-1
+        @return the address used to bid at the index
+    */
+    function getBidAddressByIndex(uint index) public view returns (address){
+        return bidAddressHistory[index];
     }
 }
 
